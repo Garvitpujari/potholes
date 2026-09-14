@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ultralytics import YOLO
 import gdown
+import requests
 
 
 st.set_page_config(
@@ -28,6 +29,13 @@ MODEL_PATH = Path("/tmp/best.pt")
 
 # Google Drive file containing the trained best.pt model
 DRIVE_FILE_ID = "1B0XF-Mnn62Wrv3G9IPeMaavkpO6ReAyl"
+
+
+# ============================================================
+# BACKEND CONFIGURATION
+# ============================================================
+
+BACKEND_URL = "https://urban-net-sih26124.onrender.com/api/edge/events"
 
 
 # ============================================================
@@ -169,6 +177,34 @@ INCIDENT_EXAMPLES = [
 
 
 # ============================================================
+# SEND EVENT TO BACKEND
+# ============================================================
+
+def send_event_to_backend(event):
+    """
+    Sends the exact event object shown in Streamlit
+    directly to the backend API.
+    """
+
+    try:
+        response = requests.post(
+            BACKEND_URL,
+            json=event,
+            headers={
+                "Content-Type": "application/json"
+            },
+            timeout=15
+        )
+
+        response.raise_for_status()
+
+        return True, response
+
+    except requests.RequestException as e:
+        return False, e
+
+
+# ============================================================
 # LOAD MODEL
 # ============================================================
 
@@ -178,7 +214,9 @@ def load_model():
     # Download model only once
     if not MODEL_PATH.exists():
 
-        with st.spinner("Downloading trained road-damage model..."):
+        with st.spinner(
+            "Downloading trained road-damage model..."
+        ):
 
             downloaded = gdown.download(
                 id=DRIVE_FILE_ID,
@@ -187,6 +225,7 @@ def load_model():
             )
 
         if downloaded is None or not MODEL_PATH.exists():
+
             raise RuntimeError(
                 "Model download failed. Make sure the Google Drive "
                 "file is shared as 'Anyone with the link → Viewer'."
@@ -196,13 +235,19 @@ def load_model():
 
 
 try:
+
     model = load_model()
 
-    st.success("✅ Trained YOLO model loaded successfully.")
+    st.success(
+        "✅ Trained YOLO model loaded successfully."
+    )
 
 except Exception as e:
 
-    st.error(f"❌ Could not load the model: {e}")
+    st.error(
+        f"❌ Could not load the model: {e}"
+    )
+
     st.stop()
 
 
@@ -253,6 +298,7 @@ def process_video(
     cap = cv2.VideoCapture(input_path)
 
     if not cap.isOpened():
+
         raise RuntimeError(
             "Could not open the uploaded video."
         )
@@ -389,7 +435,10 @@ if uploaded_video is not None:
 
         try:
 
-            # Save uploaded video
+            # =================================================
+            # SAVE UPLOADED VIDEO
+            # =================================================
+
             with tempfile.NamedTemporaryFile(
                 delete=False,
                 suffix=".mp4"
@@ -402,7 +451,10 @@ if uploaded_video is not None:
                 input_path = input_file.name
 
 
-            # Create output file
+            # =================================================
+            # CREATE OUTPUT FILE
+            # =================================================
+
             with tempfile.NamedTemporaryFile(
                 delete=False,
                 suffix=".mp4"
@@ -410,6 +462,10 @@ if uploaded_video is not None:
 
                 output_path = output_file.name
 
+
+            # =================================================
+            # PROCESS VIDEO
+            # =================================================
 
             with st.spinner(
                 "AI is analyzing the video frame-by-frame..."
@@ -461,6 +517,37 @@ if uploaded_video is not None:
             incident = random.choice(
                 INCIDENT_EXAMPLES
             )
+
+
+            # =================================================
+            # SEND EVENT TO BACKEND
+            # =================================================
+
+            backend_success, backend_result = (
+                send_event_to_backend(incident)
+            )
+
+            if backend_success:
+
+                st.success(
+                    "✅ Detection event sent to backend successfully."
+                )
+
+            else:
+
+                st.warning(
+                    "⚠️ Detection was completed, "
+                    "but the event could not be sent to backend."
+                )
+
+                st.caption(
+                    f"Backend error: {backend_result}"
+                )
+
+
+            # =================================================
+            # DETECTION EVENT
+            # =================================================
 
             st.subheader("📡 Detection Event")
 
@@ -571,7 +658,10 @@ if uploaded_video is not None:
             st.video(output_path)
 
 
-            # Download
+            # =================================================
+            # DOWNLOAD
+            # =================================================
+
             with open(
                 output_path,
                 "rb"
@@ -595,6 +685,7 @@ if uploaded_video is not None:
                 f"❌ Error while processing "
                 f"video: {e}"
             )
+
 
         finally:
 
